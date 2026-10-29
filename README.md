@@ -137,7 +137,7 @@ Terminal abstraction layer over RogueUtil. Creating the kernel hides the cursor 
 | `getRows()` / `getCols()` | Terminal size (rows and columns) |
 | `gotoXY(nX, nY)` | Move the cursor |
 | `printAt(nX, nY, cText)` | Print text at a position |
-| `setTermColor(nFg, nBg)` | Set the foreground and background colors |
+| `setTermColor(nFg, nBg)` | Set the foreground and background colors (all 16 colors on every platform; on Linux/macOS it sends the ANSI codes because RogueUtil supports only 8 background colors there) |
 | `resetTermColor()` | Reset the colors |
 | `setDefaultColors(nFg, nBg)` | Colors used by `clearRegion()` (default: white on black) |
 | `setCursorVisible(lVisible)` | Show or hide the cursor |

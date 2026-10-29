@@ -114,8 +114,28 @@ class TUIKernel
 		setCursorVisibility(lVisible)
 
 	func setTermColor nFg, nBg
+		if lUnix
+			# RogueUtil supports only the first 8 background colors on Linux/macOS
+			# (LIGHTCYAN, YELLOW, WHITE, etc. are ignored), so we send the ANSI codes
+			see ansiColors(nFg, nBg)
+			return
+		ok
 		setColor(nFg)
 		setBackgroundColor(nBg)
+
+	func ansiColors nFg, nBg
+		# ANSI escape sequence for RogueUtil colors (0-15): 30-37/90-97 and 40-47/100-107
+		# RogueUtil order: BLACK, BLUE, GREEN, CYAN, RED, MAGENTA, BROWN, GREY, then the light colors
+		aANSI = [0, 4, 2, 6, 1, 5, 3, 7]
+		cFg = "3" + aANSI[(nFg & 7) + 1]
+		if nFg & 8
+			cFg = "9" + aANSI[(nFg & 7) + 1]
+		ok
+		cBg = "4" + aANSI[(nBg & 7) + 1]
+		if nBg & 8
+			cBg = "10" + aANSI[(nBg & 7) + 1]
+		ok
+		return char(27) + "[22;" + cFg + ";" + cBg + "m"
 
 	func resetTermColor
 		resetColor()
