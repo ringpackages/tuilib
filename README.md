@@ -122,6 +122,7 @@ oAppKernel.restoreTerminal()
 | `TUI_MOUSE_WHEELUP`, `TUI_MOUSE_WHEELDOWN` | 5, 6 | Mouse wheel (Linux/macOS) |
 | `TUI_BUTTON_NONE`, `TUI_BUTTON_LEFT`, `TUI_BUTTON_RIGHT`, `TUI_BUTTON_MIDDLE` | 0, 1, 2, 3 | Mouse button (`TUIEvent.nButton`) |
 | `TUI_KEY_BACKSPACE`, `TUI_KEY_TAB` | 8, 9 | Key codes |
+| `TUI_ESCAPE_WAIT` | 30 | Linux/macOS: milliseconds to wait for the rest of an escape sequence before reporting ESC |
 
 ---
 

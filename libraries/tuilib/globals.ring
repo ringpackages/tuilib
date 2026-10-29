@@ -25,3 +25,6 @@ TUI_BUTTON_MIDDLE = 3
 # Keys that are not RogueUtil constants
 TUI_KEY_BACKSPACE = 8
 TUI_KEY_TAB       = 9
+
+# Linux/macOS: milliseconds to wait for the rest of an escape sequence before reporting ESC
+TUI_ESCAPE_WAIT = 30

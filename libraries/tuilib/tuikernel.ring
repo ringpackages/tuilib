@@ -13,7 +13,7 @@ class TUIKernel
 	# Input (see pollEvent())
 	lUnix = false			# Linux/macOS: keys and mouse reports arrive as escape sequences
 	aEventQueue = []
-	nPendingBytes = 0		# Bytes counted by kbhit() and not read yet (Linux/macOS)
+	nNextByte = -1			# Byte read ahead by unixInputAvailable() (Linux/macOS)
 	cTermState = ""			# Terminal settings to restore (Linux/macOS)
 	nMouseLastX = 0			# Last mouse state (Windows reports the state, not events)
 	nMouseLastY = 0
@@ -28,9 +28,9 @@ class TUIKernel
 		nCols = tcols()
 		lUnix = ! isWindows()
 		if lUnix
-			# Read the keys one by one, without echo (Ctrl+C still works)
+			# Read the keys one by one, without echo and without waiting (Ctrl+C still works)
 			cTermState = trim(systemCmd("stty -g 2>/dev/null"))
-			system("stty -icanon -echo min 1 time 0 2>/dev/null")
+			system("stty -icanon -echo min 0 time 0 2>/dev/null")
 		ok
 		hidecursor()
 		echooff()  # Disable automatic echo of typed characters
@@ -261,22 +261,45 @@ class TUIKernel
 		nMouseLastButtons = nButtons
 
 	func unixInputAvailable
-		if nPendingBytes > 0
+		if nNextByte >= 0
 			return true
 		ok
-		nPendingBytes = kbhit()
-		return nPendingBytes > 0
+		nNextByte = unixGetByte()
+		return nNextByte >= 0
 
-	func unixReadByte
-		# getch() reads from the C input buffer, so we count the bytes reported by kbhit()
-		if nPendingBytes > 0
-			nPendingBytes--
+	func unixGetByte
+		# Non-blocking read (the terminal uses "min 0 time 0"): -1 if there is no byte
+		# Note: getch() reads through the C input buffer, so kbhit() can't tell if bytes are waiting there
+		nByte = getch()
+		if nByte < 0
+			clearerr(stdin)		# Reading nothing sets the end-of-file flag
+			return -1
 		ok
-		return getch()
+		return nByte
+
+	func unixReadByte nWaitMS
+		# Return the next byte, waiting up to nWaitMS milliseconds (-1 if none)
+		if nNextByte >= 0
+			nByte = nNextByte
+			nNextByte = -1
+			return nByte
+		ok
+		nWaited = 0
+		while true
+			nByte = unixGetByte()
+			if nByte >= 0 or nWaited >= nWaitMS
+				return nByte
+			ok
+			msleep(1)
+			nWaited++
+		end
 
 	func unixReadEvent
 		# Decode one key or mouse report
-		nByte = unixReadByte()
+		nByte = unixReadByte(0)
+		if nByte < 0
+			return
+		ok
 		if nByte = 27
 			unixReadEscape()
 		but nByte = 13 or nByte = 10
@@ -289,19 +312,17 @@ class TUIKernel
 
 	func unixReadEscape
 		# ESC alone, or the start of an escape sequence (CSI "ESC [" or SS3 "ESC O")
-		if nPendingBytes = 0
-			nPendingBytes = kbhit()		# The rest of a sequence may arrive a bit later
-		ok
-		if nPendingBytes = 0
+		# The rest of a sequence may arrive a bit later, so wait for it before reporting ESC
+		nByte = unixReadByte(TUI_ESCAPE_WAIT)
+		if nByte < 0
 			addKeyEvent(KEY_ESCAPE)
-			return
-		ok
-		nByte = unixReadByte()
-		if nByte = ascii("[")
+		but nByte = ascii("[")
 			unixReadCSI()
 		but nByte = ascii("O")
-			nByte = unixReadByte()
-			unixAddFinalKey(char(nByte), "")
+			nByte = unixReadByte(TUI_ESCAPE_WAIT)
+			if nByte >= 0
+				unixAddFinalKey(char(nByte), "")
+			ok
 		but nByte = 27
 			addKeyEvent(KEY_ESCAPE)
 			unixReadEscape()
@@ -313,7 +334,10 @@ class TUIKernel
 		# Parameters then a final byte (@ to ~); "<" starts the SGR mouse parameters
 		cParams = ""
 		while true
-			nByte = unixReadByte()
+			nByte = unixReadByte(TUI_ESCAPE_WAIT)
+			if nByte < 0 or len(cParams) > 32
+				return		# Incomplete or invalid sequence: ignore it
+			ok
 			if nByte >= 64 and nByte <= 126 and ! (len(cParams) = 0 and nByte = ascii("<"))
 				exit
 			ok
@@ -324,10 +348,12 @@ class TUIKernel
 			unixAddMouseEvent(substr(cParams, 2), cFinal = "m", 0)		# SGR mouse report
 		but cFinal = "M" and cParams = ""
 			# X10 mouse report: three bytes (button, x, y) + 32
-			nB = unixReadByte() - 32
-			nPosX = unixReadByte() - 32
-			nPosY = unixReadByte() - 32
-			unixAddMouseEvent("" + nB + ";" + nPosX + ";" + nPosY, (nB & 3) = 3, 0)
+			nB = unixReadByte(TUI_ESCAPE_WAIT) - 32
+			nPosX = unixReadByte(TUI_ESCAPE_WAIT) - 32
+			nPosY = unixReadByte(TUI_ESCAPE_WAIT) - 32
+			if nB >= 0 and nPosX > 0 and nPosY > 0
+				unixAddMouseEvent("" + nB + ";" + nPosX + ";" + nPosY, (nB & 3) = 3, 0)
+			ok
 		but cFinal = "M" and substr(cParams, ";") > 0
 			unixAddMouseEvent(cParams, false, 32)		# urxvt mouse report
 		else
